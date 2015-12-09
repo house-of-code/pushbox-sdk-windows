@@ -2,7 +2,7 @@
 
 namespace HouseOfCode.PushBoxSDK
 {
-    class Logger : ILogger
+    public class Logger : ILogger
     {
         private string tag = "";
 

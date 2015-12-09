@@ -4,6 +4,7 @@ using Microsoft.Phone.Notification;
 using RestSharp;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.Serialization;
 using System.Security.Cryptography;
@@ -546,7 +547,7 @@ namespace HouseOfCode.PushBoxSDK
             {
                 var parameters = new Dictionary<string, object>()
                 {
-                    { Constants.JSONKeyPushReadTime,  DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:SS") },
+                    { Constants.JSONKeyPushReadTime,  DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture) },
                     { Constants.JSONKeyPushId,  pushId },
                 };
 
@@ -696,7 +697,7 @@ namespace HouseOfCode.PushBoxSDK
                     }
                     else
                     {
-                        eventArgs = new OnRequestErrorEventArgs(OnRequestErrorEventArgs.Type.ApiError, message, apiMethod);
+                        eventArgs = new OnRequestErrorEventArgs(OnRequestErrorEventArgs.Type.ApiError, apiMethod, message);
                     }
 
                     Logger.Debug("Error event!");
@@ -722,6 +723,7 @@ namespace HouseOfCode.PushBoxSDK
                 var body = requestData.Body;
                 if (Uid != null && Uid != "")
                 {
+                    Logger.Debugf("Requesting with uid: {0}", Uid);
                     body[Constants.JSONKeyUid] = Uid;
                 }
 

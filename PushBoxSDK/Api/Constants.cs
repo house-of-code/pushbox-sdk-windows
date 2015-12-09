@@ -11,9 +11,8 @@ namespace HouseOfCode.PushBoxSDK.Api
         public static readonly string Platform = "windows";
 
         #region urls
-        // internal static readonly string ApiUrl = @"https://api.pushboxsdk.com/v1/";
-        internal static readonly Uri ApiUrl = new Uri("http://10.0.0.7:3000/api/v1");
-        internal static readonly string Host = @"api.pushboxsdk.com";
+        internal static readonly string ApiUrl = "https://api.pushboxsdk.com/v1/";
+        internal static readonly string Host = "api.pushboxsdk.com";
         #endregion
 
         #region JSON keys
