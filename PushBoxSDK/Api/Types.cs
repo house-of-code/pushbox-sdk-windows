@@ -1,4 +1,4 @@
-﻿namespace HouseOfCode.Api
+﻿namespace HouseOfCode.PushBoxSDK.Api
 {
     public enum Gender
     {

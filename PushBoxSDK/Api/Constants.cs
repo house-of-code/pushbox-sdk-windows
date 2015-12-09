@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace HouseOfCode.Api
+namespace HouseOfCode.PushBoxSDK.Api
 {
     internal static class Constants
     {

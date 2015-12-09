@@ -1,4 +1,4 @@
-﻿namespace HouseOfCode
+﻿namespace HouseOfCode.PushBoxSDK
 {
     public enum LogLevel
     {

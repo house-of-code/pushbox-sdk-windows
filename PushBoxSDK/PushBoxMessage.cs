@@ -1,6 +1,6 @@
 ﻿using RestSharp.Deserializers;
 
-namespace HouseOfCode
+namespace HouseOfCode.PushBoxSDK
 {
     public struct PushBoxMessage
     {

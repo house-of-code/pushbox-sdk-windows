@@ -1,7 +1,7 @@
 ﻿using System;
 using Windows.Foundation;
 
-namespace HouseOfCode.Helpers
+namespace HouseOfCode.PushBoxSDK.Helpers
 {
     public static class UriHelper
     {

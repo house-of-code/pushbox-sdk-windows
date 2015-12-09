@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Windows.Storage;
 
-namespace HouseOfCode.Helpers
+namespace HouseOfCode.PushBoxSDK.Helpers
 {
     class LocalSettingsHelper
     {

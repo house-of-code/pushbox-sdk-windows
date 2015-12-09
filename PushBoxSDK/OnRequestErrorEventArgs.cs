@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace HouseOfCode
+namespace HouseOfCode.PushBoxSDK
 {
     public class OnRequestErrorEventArgs : EventArgs
     {

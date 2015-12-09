@@ -1,4 +1,4 @@
-﻿using HouseOfCode.Helpers;
+﻿using HouseOfCode.PushBoxSDK.Helpers;
 using Microsoft.Phone.Notification;
 using System;
 using System.Collections.Generic;
@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace HouseOfCode.Helpers
+namespace HouseOfCode.PushBoxSDK.Helpers
 {
     public class MpnsHelper
     {

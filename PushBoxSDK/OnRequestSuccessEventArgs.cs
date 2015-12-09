@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace HouseOfCode
+namespace HouseOfCode.PushBoxSDK
 {
     public class OnRequestSuccessEventArgs
     {

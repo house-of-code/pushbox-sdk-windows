@@ -1,5 +1,5 @@
-﻿using HouseOfCode.Api;
-using HouseOfCode.Helpers;
+﻿using HouseOfCode.PushBoxSDK.Api;
+using HouseOfCode.PushBoxSDK.Helpers;
 using Microsoft.Phone.Notification;
 using RestSharp;
 using System;
@@ -13,7 +13,7 @@ using System.Windows.Navigation;
 using Windows.Foundation;
 using Windows.Networking.Connectivity;
 
-namespace HouseOfCode
+namespace HouseOfCode.PushBoxSDK
 {
     public class PushBoxSDK
     {
@@ -93,12 +93,11 @@ namespace HouseOfCode
             }
         }
 
-        private async void TriggerPush(PushBoxMessage message)
+        private void TriggerPush(PushBoxMessage message)
         {
             var eventArgs = new OnPushEventArgs(message);
             OnPush(this, eventArgs);
-            await ApiInstance.QueueRequest(Constants.MethodPushInteracted, NewParameter(
-                Constants.JSONKeyPushId, message.Id));
+            ApiInstance.LogPushInteracted(message.Id);
         }
 
         /// <summary>
@@ -543,7 +542,7 @@ namespace HouseOfCode
                 return resultData.ToHexString();
             }
 
-            private async void LogPushInteracted(int pushId)
+            internal async void LogPushInteracted(int pushId)
             {
                 var parameters = new Dictionary<string, object>()
                 {

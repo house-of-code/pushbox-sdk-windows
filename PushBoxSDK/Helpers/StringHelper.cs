@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace HouseOfCode.Helpers
+namespace HouseOfCode.PushBoxSDK.Helpers
 {
     public static class StringHelper
     {

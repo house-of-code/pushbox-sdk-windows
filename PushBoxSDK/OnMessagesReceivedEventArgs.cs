@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace HouseOfCode
+namespace HouseOfCode.PushBoxSDK
 {
     public class OnMessagesReceivedEventArgs
     {

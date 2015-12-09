@@ -1,6 +1,6 @@
 ﻿using Microsoft.Phone.Notification;
 
-namespace HouseOfCode.Helpers
+namespace HouseOfCode.PushBoxSDK.Helpers
 {
     public static class HttpNotificationHelper
     {
