@@ -1,18 +1,21 @@
 ﻿using HouseOfCode.PushBoxSDK.Api;
 using HouseOfCode.PushBoxSDK.Helpers;
-using Microsoft.Phone.Notification;
-using RestSharp;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Runtime.Serialization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows.Navigation;
 using Windows.Foundation;
 using Windows.Networking.Connectivity;
+using Windows.Networking.PushNotifications;
+using HousePushBoxSDK.Helpers;
 
 namespace HouseOfCode.PushBoxSDK
 {
@@ -42,61 +45,35 @@ namespace HouseOfCode.PushBoxSDK
         #endregion
 
         private Api ApiInstance;
-        public ILogger Logger;
-        private bool IsSetup = false;
+        private DataContractJsonHelper JsonHelper { get; set; }
+        public readonly ILogger Logger;
+        private bool IsSetup { get; set; } = false;
 
         public event EventHandler<OnPushEventArgs> OnPush;
-        public event EventHandler<NotificationChannelErrorEventArgs> OnPushError;
+        // public event EventHandler<NotificationChannelErrorEventArgs> OnPushError;
         public event EventHandler<OnRequestErrorEventArgs> OnRequestError;
         public event EventHandler<OnRequestSuccessEventArgs> OnRequestSuccess;
         public event EventHandler<OnMessagesReceivedEventArgs> OnMessagesReceived;
 
         internal void RequestError(OnRequestErrorEventArgs eventArgs)
         {
-            if (OnRequestError != null)
-            {
-                OnRequestError(this, eventArgs);
-            }
+            OnRequestError?.Invoke(this, eventArgs);
         }
 
         internal void RequestSuccess(OnRequestSuccessEventArgs eventArgs)
         {
-            if (OnRequestSuccess != null)
-            {
-                OnRequestSuccess(this, eventArgs);
-            }
+            OnRequestSuccess?.Invoke(this, eventArgs);
         }
 
         internal void MessagesReceived(List<PushBoxMessage> messages)
         {
-            if (OnMessagesReceived != null)
-            {
-                OnMessagesReceived(this, new OnMessagesReceivedEventArgs(messages));
-            }
-        }
-
-        private void TriggerPush(NavigatingCancelEventArgs e)
-        {
-            if (OnPush != null)
-            {
-                var payload = GetPayload(e.Uri);
-
-                var message = MessageFromPayload(payload);
-
-                if (message.HasValue)
-                {
-                    TriggerPush(message.Value);
-                }
-            }
-            else
-            {
-                Logger.Warn("Did receive push, but no OnPush handlers registered.");
-            }
+            OnMessagesReceived?.Invoke(this, new OnMessagesReceivedEventArgs(messages));
         }
 
         private void TriggerPush(PushBoxMessage message)
         {
             var eventArgs = new OnPushEventArgs(message);
+            Debug.Assert(OnPush != null, "OnPush != null");
             OnPush(this, eventArgs);
             ApiInstance.LogPushInteracted(message.Id);
         }
@@ -110,36 +87,56 @@ namespace HouseOfCode.PushBoxSDK
         {
             Logger.Debug("Setting up...");
             Instance.ApiInstance = new Api(apiKey, apiSecret, new Logger("Api", Logger.Level));
+            JsonHelper = new DataContractJsonHelper(new Logger("DataContractJsonHelper", Logger.Level));
             Instance.Start();
         }
 
-        /// <summary>
-        /// Handler for navigation events. Register with Application Root Frame.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        public void OnNavigating(object sender, NavigatingCancelEventArgs e)
-        {
-            Logger.Debugf("Got navigation event {0}, isCancelable? {1}", e.Uri, e.IsCancelable);
-            if (e.IsCancelable && e.Uri.isPushBoxUri())
-            {
-                Logger.Debug("Cancelling and handling navigation...");
-                TriggerPush(e);
-
-                e.Cancel = true;
-            }
-        }
-
-
-
+        
         /// <summary>
         /// Api has been setup, start registering channel/setting push token
         /// </summary>
         private void Start()
         {
-            SetupMPNSChannel();
+            if (IsSetup)
+            {
+                return;
+            }
+            IsSetup = true;
+
+            SetupWnsChannel();
             // Subscribe to network connectivity events
             SetupNetworkReachability();
+        }
+
+        private async void SetupWnsChannel()
+        {
+            try
+            {
+                var channel = await PushNotificationChannelManager.CreatePushNotificationChannelForApplicationAsync();
+                channel.PushNotificationReceived += ChannelOnPushNotificationReceived;
+                ApiInstance.Token = channel.Uri;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(ex.Message);
+            }
+        }
+
+        private void ChannelOnPushNotificationReceived(PushNotificationChannel sender, PushNotificationReceivedEventArgs args)
+        {
+            Logger.Debug("Got push!");
+            if (args.NotificationType != PushNotificationType.Raw)
+            {
+                Logger.Warnf("Got unsupported notification type: {0}", args.NotificationType);
+                return;
+            }
+
+            string serialized = args?.RawNotification?.Content ?? "";
+            var message = (PushBoxMessage?) SimpleJson.DeserializeObject<PushBoxMessage>(serialized);
+            if (message.HasValue)
+            {
+                TriggerPush(message.Value);
+            }
         }
 
         private void SetupNetworkReachability()
@@ -149,11 +146,15 @@ namespace HouseOfCode.PushBoxSDK
 
         private async void NetworkInformation_NetworkStatusChanged(object sender)
         {
-            var networkLevel = NetworkInformation.GetInternetConnectionProfile();
-
-            if (IsConnected)
+            try
             {
+                if (!IsConnected) return;
+
                 await ApiInstance.TakeNext();
+            }
+            catch (Exception e)
+            {
+                Logger.Warn(e.Message);
             }
         }
 
@@ -169,145 +170,6 @@ namespace HouseOfCode.PushBoxSDK
             }
         }
 
-        
-        private string GetPayload(string rawUri)
-        {
-            Logger.Debugf("Getting payload from uri: {0}", rawUri);
-
-            var decoder = new WwwFormUrlDecoder("?q=" + rawUri.Substring(UriHelper.UriPrefix.Length));
-            var payload = decoder.GetFirstValueByName("q");
-
-            Logger.Debugf("Got payload: \"{0}\"", payload);
-
-            return payload;
-        }
-
-        private string GetPayload(Uri uri)
-        {
-            if (uri == null)
-            {
-                return "";
-            }
-
-            if (!uri.isPushBoxUri())
-            {
-                return "";
-            }
-
-            var rawUri = uri.ToString();
-
-            return GetPayload(rawUri);
-        }
-
-        private void SetupMPNSChannel()
-        {
-            Logger.Debug("Setting up...");
-            if (IsSetup)
-            {
-                return;
-            }
-            else
-            {
-                IsSetup = true;
-            }
-
-            HttpNotificationChannel pushChannel;
-
-            string channelName = "PushBoxChannel";
-
-            pushChannel = HttpNotificationChannel.Find(channelName);
-
-            var pushChannelWasNull = false;
-            if (pushChannel == null)
-            {
-                // TOOD: serviceName for authenticated push?
-                // https://blogs.windows.com/buildingapps/2013/06/06/no-quota-push-notifications-using-a-root-certificate-authority/
-                pushChannel = new HttpNotificationChannel(channelName);
-                pushChannelWasNull = true;
-            }
-
-            pushChannel.ChannelUriUpdated += PushChannel_ChannelUriUpdated;
-            pushChannel.ErrorOccurred += PushChannel_ErrorOccurred;
-            pushChannel.HttpNotificationReceived += PushChannel_HttpNotificationReceived;
-            pushChannel.ShellToastNotificationReceived += PushChannel_ShellToastNotificationReceived;
-
-            if (pushChannelWasNull)
-            {
-                pushChannel.Open();
-            }
-
-            pushChannel.BindToShellToast();
-
-            Logger.Debug("Did setup MPNS channel.");
-        }
-
-        #region HttpNotificationChannel handlers
-
-        private void PushChannel_HttpNotificationReceived(object sender, HttpNotificationEventArgs e)
-        {
-            Logger.Debugf("Got http notification: \"{0}\" with body: \"{1}\"", e.Notification.ToString(), e.Notification.ReadBody());
-        }
-
-        private void PushChannel_ErrorOccurred(object sender, NotificationChannelErrorEventArgs e)
-        {
-            if (OnPushError != null)
-            {
-                OnPushError(sender, e);
-            }
-        }
-
-        private void PushChannel_ShellToastNotificationReceived(object sender, NotificationEventArgs e)
-        {
-            Logger.Debugf("Got shell toast notification: {0}", e.ToString());
-
-            var helper = new MpnsHelper(new Logger("MpnsHelper", this.Logger.Level));
-            var data = helper.NotificationEventToToastData(e);
-            Logger.Debugf("Handling toast data: {0}", data);
-            var payload = "";
-            PushBoxMessage? message = null;
-            try
-            {
-                payload = GetPayload(data.Param);
-                message = MessageFromPayload(payload);
-            }
-            catch (FormatException formatError)
-            {
-                Logger.Debug(formatError.Message);
-            }
-
-            if (message.HasValue)
-            {
-                TriggerPush(message.Value);
-            }
-        }
-
-        private static PushBoxMessage? MessageFromPayload(string payload)
-        {
-            var maybeMiniMessage = SerializationHelper.DataContractDeserializeStruct<MiniPushBoxMessage>(payload);
-
-            if (maybeMiniMessage != null)
-            {
-                var miniMessage = maybeMiniMessage.Value;
-                var message = new PushBoxMessage(miniMessage.Title, miniMessage.Message, miniMessage.Payload);
-                message.Id = miniMessage.Id;
-                message.ExpirationDate = miniMessage.ExpirationDate;
-                message.Badge = miniMessage.Badge;
-
-                return message;
-            } else
-            {
-                return null;
-            }
-        }
-
-        private void PushChannel_ChannelUriUpdated(object sender, NotificationChannelUriEventArgs e)
-        {
-            Logger.Debugf("Got uri updated: {0}", e.ChannelUri);
-            ApiInstance.Token = e.ChannelUri.ToString();
-        }
-
-        #endregion
-
         private static Dictionary<string, object> NewParameter(string key, object value)
         {
             return new Dictionary<string, object>() { { key, value } };
@@ -321,13 +183,20 @@ namespace HouseOfCode.PushBoxSDK
         /// <param name="message"></param>
         public async void SetMessageRead(PushBoxMessage message)
         {
-            var parameters = new Dictionary<string, object>()
+            try
             {
-                { Constants.JSONKeyPushId, message.Id },
-                { Constants.JSONKeyPushReadTime, DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:SS") },
-            };
+                var parameters = new Dictionary<string, object>()
+                {
+                    {Constants.JSONKeyPushId, message.Id},
+                    {Constants.JSONKeyPushReadTime, DateTime.UtcNow.ToString("yyyy/MM/dd HH:mm:SS")},
+                };
 
-            await ApiInstance.QueueRequest(Constants.MethodPushRead, parameters);
+                await ApiInstance.QueueRequest(Constants.MethodPushRead, parameters);
+            }
+            catch (Exception e)
+            {
+                Logger.Warn(e.Message);
+            }
         }
 
         /// <summary>
@@ -335,7 +204,14 @@ namespace HouseOfCode.PushBoxSDK
         /// </summary>
         public async void GetMessages()
         {
-            await ApiInstance.QueueRequest(Constants.MethodInbox);
+            try
+            {
+                await ApiInstance.QueueRequest(Constants.MethodInbox);
+            }
+            catch (Exception e)
+            {
+                Logger.Warn(e.Message);
+            }
         }
 
         /// <summary>
@@ -408,7 +284,7 @@ namespace HouseOfCode.PushBoxSDK
         private static int GetUnixTimestamp()
         {
             var epoch = (new DateTime(1970, 1, 1)).ToUniversalTime();
-            return (Int32)DateTime.UtcNow.Subtract(epoch).TotalSeconds;
+            return (int)DateTime.UtcNow.Subtract(epoch).TotalSeconds;
         }
 
         private class Api
@@ -418,13 +294,7 @@ namespace HouseOfCode.PushBoxSDK
             private ILogger Logger { get; set; }
 
             private bool IsWorking { get; set; }
-            private bool IsReady
-            {
-                get
-                {
-                    return Token != null && Token != "";
-                }
-            }
+            private bool IsReady => !string.IsNullOrEmpty(Token);
             private bool IsTokenSent { get; set; }
 
             private string _token;
@@ -446,7 +316,7 @@ namespace HouseOfCode.PushBoxSDK
             {
                 get
                 {
-                    if (_uid == "" || _uid == null)
+                    if (string.IsNullOrEmpty(_uid))
                     {
                         var localSettings = new LocalSettingsHelper();
                         _uid = localSettings.TryGetValueWithDefault<string>(Constants.LocalSettingsKeyUid, "");
@@ -472,15 +342,23 @@ namespace HouseOfCode.PushBoxSDK
                         var localSettings = new LocalSettingsHelper();
                         var requestQueueListSerialized = localSettings.TryGetValueWithDefault<string>(Constants.LocalSettingsKeyQueue, null);
 
-                        if (requestQueueListSerialized != null && requestQueueListSerialized != "")
+                        if (!string.IsNullOrEmpty(requestQueueListSerialized))
                         {
                             Logger.Debugf("Deserializing: {0}", requestQueueListSerialized);
-                            var savedRequestQueue = SerializationHelper.DataContractDeserializeClass<List<RequestQueueItem>>(requestQueueListSerialized);
-
-                            Logger.Debugf("Got {0}", savedRequestQueue);
-                            if (savedRequestQueue != null)
+                            try
                             {
-                                _requestQueue = new Queue<RequestQueueItem>(savedRequestQueue);
+                                var savedRequestQueue = SimpleJson.DeserializeObject<List<RequestQueueItem>>(requestQueueListSerialized);
+
+                                Logger.Debugf("Got {0}", savedRequestQueue);
+                                if (savedRequestQueue != null)
+                                {
+                                    _requestQueue = new Queue<RequestQueueItem>(savedRequestQueue);
+                                }
+                            }
+                            catch (NullReferenceException) { }
+                            catch (Exception e)
+                            {
+                                Logger.Warn(e.Message);
                             }
                         }
                     }
@@ -496,7 +374,8 @@ namespace HouseOfCode.PushBoxSDK
                 {
                     var localSettings = new LocalSettingsHelper();
                     Logger.Debugf("Serializing queue: {0}", value);
-                    var serialized = SerializationHelper.DataContractSerializeObject(value.ToList());
+                    List<RequestQueueItem> objectToSerialize = value.ToList();
+                    var serialized = SimpleJson.SerializeObject(objectToSerialize);
                     Logger.Debugf("Serialized: {0}", serialized);
                     localSettings.AddOrUpdateValue(Constants.LocalSettingsKeyQueue, serialized);
                     _requestQueue = value;
@@ -504,10 +383,10 @@ namespace HouseOfCode.PushBoxSDK
             }
 
             [DataContract]
-            internal class RequestQueueItem
+            public class RequestQueueItem
             {
                 [DataMember]
-                public string ApiMethod { get; set; }
+                public string ApiMethod { get; private set; }
 
                 [DataMember]
                 public Dictionary<string, object> Body { get; set; }
@@ -529,20 +408,7 @@ namespace HouseOfCode.PushBoxSDK
                 this.Logger = logger;
             }
 
-            private string Hmac(string apiKey, string secret, int unixTimestamp)
-            {
-                var format = apiKey + ":" + unixTimestamp.ToString();
-
-                Logger.Debugf("Hashing: {0}", format);
-
-                byte[] key = Encoding.UTF8.GetBytes(secret);
-                byte[] data = Encoding.UTF8.GetBytes(format);
-                var hmac = new HMACSHA1(key);
-
-                var resultData = hmac.ComputeHash(data);
-                return resultData.ToHexString();
-            }
-
+            
             internal async void LogPushInteracted(int pushId)
             {
                 var parameters = new Dictionary<string, object>()
@@ -563,11 +429,14 @@ namespace HouseOfCode.PushBoxSDK
             /// <returns></returns>
             internal async Task QueueRequest(string apiMethod, Dictionary<string, object> parameters = null)
             {
-                Dictionary<string, object> postBodyData = GetRequestBody();
+                var postBodyData = GetRequestBody();
 
                 if (parameters != null)
                 {
-                    parameters.ToList().ForEach((i) => { postBodyData[i.Key] = i.Value; });
+                    foreach (KeyValuePair<string, object> pair in parameters)
+                    {
+                        postBodyData[pair.Key] = pair.Value;
+                    }
                 }
 
                 await Queue(new RequestQueueItem(apiMethod, postBodyData));
@@ -575,10 +444,17 @@ namespace HouseOfCode.PushBoxSDK
 
             internal async Task QueueChannelRequest(string apiMethod, List<string> channels)
             {
-                Dictionary<string, object> postBodyData = GetRequestBody();
-                var requestItem = new RequestQueueItem(apiMethod, postBodyData);
-                requestItem.Channels = channels;
-                await Queue(requestItem);
+                try
+                {
+                    var postBodyData = GetRequestBody();
+                    var requestItem = new RequestQueueItem(apiMethod, postBodyData) {Channels = channels};
+                    await Queue(requestItem);
+                }
+                catch (Exception e)
+                {
+                    Logger.Warnf("Exception on queuing request: {0}", e.Message);
+
+                }
             }
 
             private async Task Queue(RequestQueueItem requestItem)
@@ -598,7 +474,7 @@ namespace HouseOfCode.PushBoxSDK
                     { Constants.JSONKeyApiKey, ApiKey },
                     { Constants.JSONKeyPlatform,  Constants.Platform },
                     { Constants.JSONKeyTS, unixTimestamp },
-                    { Constants.JSONKeyHMAC, Hmac(ApiKey, ApiSecret, unixTimestamp) },
+                    { Constants.JSONKeyHMAC, CryptographyHelper.CreateHash(ApiKey, ApiSecret, unixTimestamp) },
                 };
 
                 return postBodyData;
@@ -606,7 +482,7 @@ namespace HouseOfCode.PushBoxSDK
 
             internal async Task TakeNext()
             {
-                var handled = false;
+                bool handled;
                 Logger.Debug("Take next...");
                 if (!IsReady)
                 {
@@ -635,10 +511,11 @@ namespace HouseOfCode.PushBoxSDK
                 else
                 {
                     var queue = RequestQueue;
-                    Logger.Debugf("Working on queue: {0}", queue);
+                    Logger.Debugf("Working on queue: [{0}]{1}", queue.Count, queue);
                     if (queue.Count != 0)
                     {
                         var nextRequest = RequestQueue.Peek();
+                        Logger.Debug($"Peeked: {nextRequest.ApiMethod}");
                         var response = await ExecuteRequest(nextRequest);
                         handled = HandleResponse(nextRequest.ApiMethod, response);
                     }
@@ -660,12 +537,19 @@ namespace HouseOfCode.PushBoxSDK
             private bool HandleResponse(string apiMethod, IRestResponse<Response> response)
             {
                 Logger.Debugf("Handling response(method={0}): {1}", apiMethod, response.Data);
-                Logger.Debug(response.Content);
-                if (response.Data.Success)
+
+                if (response.Data == null)
+                {
+                    Logger.Debugf("Got unparseable response.");
+                    return false;
+                }
+
+                var responseData = response.Data;
+                if (responseData.Success)
                 {
                     if (apiMethod == Constants.MethodSetToken)
                     {
-                        Uid = response.Data.Uid;
+                        Uid = responseData.Uid;
                         IsTokenSent = true;
                     }
                     else
@@ -675,12 +559,12 @@ namespace HouseOfCode.PushBoxSDK
                     }
 
                     Logger.Debug("Success event!");
-                    var eventArgs = new OnRequestSuccessEventArgs(apiMethod, response.Data.Message ?? "");
-                    PushBoxSDK.Instance.RequestSuccess(eventArgs);
+                    var eventArgs = new OnRequestSuccessEventArgs(apiMethod, responseData.Message ?? "");
+                    Instance.RequestSuccess(eventArgs);
 
                     if (apiMethod == Constants.MethodInbox)
                     {
-                        PushBoxSDK.Instance.MessagesReceived(response.Data.Messages);
+                        Instance.MessagesReceived(responseData.Messages);
                     }
 
                     Logger.Debug("Did send request success event");
@@ -688,20 +572,22 @@ namespace HouseOfCode.PushBoxSDK
                 }
                 else
                 {
-                    var message = response.Data.Message ?? "";
+                    var message = responseData.Message ?? "";
 
                     OnRequestErrorEventArgs eventArgs;
-                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
                     {
-                        eventArgs = new OnRequestErrorEventArgs(OnRequestErrorEventArgs.Type.AuthorizationError, apiMethod, message);
+                        eventArgs = new OnRequestErrorEventArgs(OnRequestErrorEventArgs.Type.AuthorizationError,
+                            apiMethod, message);
                     }
                     else
                     {
-                        eventArgs = new OnRequestErrorEventArgs(OnRequestErrorEventArgs.Type.ApiError, apiMethod, message);
+                        eventArgs = new OnRequestErrorEventArgs(OnRequestErrorEventArgs.Type.ApiError, apiMethod,
+                            message);
                     }
 
                     Logger.Debug("Error event!");
-                    PushBoxSDK.Instance.RequestError(eventArgs);
+                    Instance.RequestError(eventArgs);
                     return false;
                 }
             }
@@ -715,13 +601,14 @@ namespace HouseOfCode.PushBoxSDK
 
             private async Task<IRestResponse<Response>> ExecuteRequest(RequestQueueItem requestData)
             {
-                var client = new RestClient(Constants.ApiUrl);
-                var request = new RestRequest(requestData.ApiMethod);
-                request.Method = Method.POST;
-                request.RequestFormat = DataFormat.Json;
-
+                Logger.Debugf("Executing... {0}", requestData.ApiMethod);
+                var methodUri = new Uri(new Uri(Constants.ApiUrl), requestData.ApiMethod);
+                var handler = new HttpClientHandler {UseProxy = true};
+                var httpClient = new HttpClient(handler);
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                
                 var body = requestData.Body;
-                if (Uid != null && Uid != "")
+                if (!string.IsNullOrEmpty(Uid))
                 {
                     Logger.Debugf("Requesting with uid: {0}", Uid);
                     body[Constants.JSONKeyUid] = Uid;
@@ -731,15 +618,56 @@ namespace HouseOfCode.PushBoxSDK
                 {
                     body[Constants.JSONKeyChannels] = requestData.Channels;
                 }
-                request.AddJsonBody(body);
 
-                if (Logger.Level <= LogLevel.Debug)
+                var serializedJsonBody = SimpleJson.SerializeObject(body);
+                
+                Logger.Debugf("Sending body: {0}", serializedJsonBody);
+
+                try
                 {
-                    Logger.Debugf("Requesting({0}): {1}", requestData.ApiMethod, request.ToString());
+                    var httpResponse =
+                        await
+                            httpClient.PostAsync(methodUri,
+                                new StringContent(serializedJsonBody, Encoding.UTF8, "application/json"));
+
+                    var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                    var response = SimpleJson.DeserializeObject<Response>(responseContent);
+                    
+                    Logger.Debugf("Got response({0}): {1}", httpResponse.StatusCode, responseContent);
+
+                    return new RestResponse(response, httpResponse.StatusCode);
+                }
+                catch (Exception ex)
+                { 
+                    Logger.Warn(ex.Message);
+                    Instance.RequestError(new OnRequestErrorEventArgs(ex));
+                }
+                finally
+                {
+                    httpClient.Dispose();
                 }
 
-                return await client.ExecuteTaskAsync<Response>(request);
+                return null;
             }
+        }
+    }
+
+    internal interface IRestResponse<out T>
+    {
+        T Data { get; }
+        HttpStatusCode StatusCode { get; }
+    }
+
+    internal struct RestResponse : IRestResponse<Response>
+    {
+        public Response Data { get; private set; }
+        public HttpStatusCode StatusCode { get; private set; }
+
+        public RestResponse(Response data, HttpStatusCode statusCode)
+        {
+            Data = data;
+            StatusCode = statusCode;
         }
     }
 }

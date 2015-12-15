@@ -6,10 +6,10 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>8.0.30703</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{8fec0fb6-284a-4b99-9d0e-a306443a493c}</ProjectGuid>
+    <ProjectGuid>{8FEC0FB6-284A-4B99-9D0E-A306443A493C}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>PushBoxSDK</RootNamespace>
+    <RootNamespace>HouseOfCode.PushBoxSDK</RootNamespace>
     <AssemblyName>PushBoxSDK</AssemblyName>
     <DefaultLanguage>en-US</DefaultLanguage>
     <TargetPlatformVersion>8.1</TargetPlatformVersion>
@@ -80,10 +80,28 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- A reference to the entire .Net Framework and Windows SDK are automatically included -->
+    <None Include="PushBoxSDK.nuspec" />
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Class1.cs" />
+    <Compile Include="Api\Constants.cs" />
+    <Compile Include="Api\Responses.cs" />
+    <Compile Include="Api\Types.cs" />
+    <Compile Include="Helpers\CryptographyHelper.cs" />
+    <Compile Include="Helpers\LocalSettingsHelper.cs" />
+    <Compile Include="Helpers\DataContractJsonHelper.cs" />
+    <Compile Include="Helpers\SimpleJson.cs" />
+    <Compile Include="Helpers\StreamHelper.cs" />
+    <Compile Include="Helpers\StringHelper.cs" />
+    <Compile Include="ILogger.cs" />
+    <Compile Include="Logger.cs" />
+    <Compile Include="OnMessagesReceivedEventArgs.cs" />
+    <Compile Include="OnPushEventArgs.cs" />
+    <Compile Include="OnRequestErrorEventArgs.cs" />
+    <Compile Include="OnRequestSuccessEventArgs.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="PushBoxMessage.cs" />
+    <Compile Include="PushBoxSDK.cs" />
   </ItemGroup>
   <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '12.0' ">
     <VisualStudioVersion>12.0</VisualStudioVersion>
@@ -99,5 +117,4 @@
   <Target Name="AfterBuild">
   </Target>
   -->
-
 </Project>

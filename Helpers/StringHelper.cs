@@ -9,8 +9,7 @@ namespace HouseOfCode.PushBoxSDK.Helpers
             return 0 == String.Compare(
                      a,
                      b,
-                     System.Globalization.CultureInfo.InvariantCulture,
-                     System.Globalization.CompareOptions.IgnoreCase
+                     StringComparison.OrdinalIgnoreCase
                 );
         }
     }
