@@ -44,13 +44,12 @@ namespace HouseOfCode.PushBoxSDK
 
         #endregion
 
-        private Api ApiInstance;
-        private DataContractJsonHelper JsonHelper { get; set; }
+        private Api ApiInstance { get; set; }
         public readonly ILogger Logger;
         private bool IsSetup { get; set; } = false;
 
         public event EventHandler<OnPushEventArgs> OnPush;
-        // public event EventHandler<NotificationChannelErrorEventArgs> OnPushError;
+        public event EventHandler<OnPushErrorEventArgs> OnPushError;
         public event EventHandler<OnRequestErrorEventArgs> OnRequestError;
         public event EventHandler<OnRequestSuccessEventArgs> OnRequestSuccess;
         public event EventHandler<OnMessagesReceivedEventArgs> OnMessagesReceived;
@@ -87,7 +86,6 @@ namespace HouseOfCode.PushBoxSDK
         {
             Logger.Debug("Setting up...");
             Instance.ApiInstance = new Api(apiKey, apiSecret, new Logger("Api", Logger.Level));
-            JsonHelper = new DataContractJsonHelper(new Logger("DataContractJsonHelper", Logger.Level));
             Instance.Start();
         }
 
@@ -131,11 +129,20 @@ namespace HouseOfCode.PushBoxSDK
                 return;
             }
 
-            string serialized = args?.RawNotification?.Content ?? "";
-            var message = (PushBoxMessage?) SimpleJson.DeserializeObject<PushBoxMessage>(serialized);
-            if (message.HasValue)
+            var serialized = args?.RawNotification?.Content ?? "";
+            try
             {
-                TriggerPush(message.Value);
+                Logger.Debugf("Raw push content: {0}", serialized);
+                var message = SimpleJson.DeserializeObject<PushBoxMessage>(serialized, SimpleJson.DataContractJsonSerializerStrategy);
+                if (message != null)
+                {
+                    TriggerPush(message);
+                }
+            }
+            catch (SerializationException se)
+            {
+                Logger.Warn($"Could not deserialize pushbox message: [{se.Message}], from: \"{serialized}\"");
+                OnPushError?.Invoke(this, new OnPushErrorEventArgs(se));
             }
         }
 
@@ -386,18 +393,19 @@ namespace HouseOfCode.PushBoxSDK
             public class RequestQueueItem
             {
                 [DataMember]
-                public string ApiMethod { get; private set; }
+                public string ApiMethod { get; }
 
                 [DataMember]
-                public Dictionary<string, object> Body { get; set; }
+                public Dictionary<string, object> Body { get; }
 
                 [DataMember]
-                public List<String> Channels { get; set; }
+                public List<string> Channels { get; set; }
 
                 public RequestQueueItem(string apiMethod, Dictionary<string, object> body)
                 {
                     ApiMethod = apiMethod;
                     Body = body;
+                    Channels = new List<string>();
                 }
             }
 
@@ -433,7 +441,7 @@ namespace HouseOfCode.PushBoxSDK
 
                 if (parameters != null)
                 {
-                    foreach (KeyValuePair<string, object> pair in parameters)
+                    foreach (var pair in parameters)
                     {
                         postBodyData[pair.Key] = pair.Value;
                     }
@@ -614,9 +622,13 @@ namespace HouseOfCode.PushBoxSDK
                     body[Constants.JSONKeyUid] = Uid;
                 }
 
-                if (requestData.Channels != null)
+                if (requestData.ApiMethod == Constants.MethodSetChannels)
                 {
-                    body[Constants.JSONKeyChannels] = requestData.Channels;
+                    var channels = requestData.Channels;
+                    if (channels != null && channels.Count > 0)
+                    {
+                        body[Constants.JSONKeyChannels] = requestData.Channels;
+                    }
                 }
 
                 var serializedJsonBody = SimpleJson.SerializeObject(body);

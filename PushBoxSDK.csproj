@@ -25,6 +25,7 @@
     <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_PHONE_APP</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <CodeAnalysisIgnoreGeneratedCode>true</CodeAnalysisIgnoreGeneratedCode>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -96,6 +97,7 @@
     <Compile Include="ILogger.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="OnMessagesReceivedEventArgs.cs" />
+    <Compile Include="OnPushErrorEventArgs.cs" />
     <Compile Include="OnPushEventArgs.cs" />
     <Compile Include="OnRequestErrorEventArgs.cs" />
     <Compile Include="OnRequestSuccessEventArgs.cs" />

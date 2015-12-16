@@ -1,18 +1,12 @@
 ﻿using System;
 using System.Runtime.Serialization;
+using HouseOfCode.PushBoxSDK.Helpers;
 
 namespace HouseOfCode.PushBoxSDK
 {
     [DataContract]
-    public struct PushBoxMessage
+    public class PushBoxMessage
     {
-        public PushBoxMessage(string title, string message, string payload) : this()
-        {
-            Title = title;
-            Message = message;
-            Payload = payload;
-        }
-
         [DataMember(Name = "id")]
         public int Id { get; set; }
 
@@ -23,7 +17,7 @@ namespace HouseOfCode.PushBoxSDK
         public string Message { get; set; }
 
         [DataMember(Name = "payload")]
-        public string Payload { get; set; }
+        public dynamic Payload { get; set; }
 
         [DataMember(Name = "badge")]
         public int Badge { get; set; }
