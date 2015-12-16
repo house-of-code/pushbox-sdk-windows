@@ -66,7 +66,7 @@ namespace HouseOfCode.PushBoxSDK
         /// <param name="package">Application package</param>
         /// <param name="taskName"></param>
         /// <param name="taskEntryPoint"></param>
-        public void RegisterBackgroundTask<T>(Package package, string taskName)
+        public void RegisterBackgroundTask<T>(Package package, string taskName) where T : IBackgroundTask
         {
             RegisterBackgroundTask(package, taskName, typeof (T).FullName);
         }
