@@ -54,6 +54,7 @@ namespace HouseOfCode.PushBoxSDK.Api
         #region local settings
         internal static readonly string LocalSettingsKeyUid = "PushBoxSDK_UID";
         internal static readonly string LocalSettingsKeyQueue = "PushBoxSDK_Queue";
+        internal static readonly string LocalSettingsKeyAppVersion = "PushBoxSDK_AppVersion";
         #endregion
     }
 }

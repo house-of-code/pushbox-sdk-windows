@@ -133,7 +133,7 @@ namespace HouseOfCode.PushBoxSDK
             try
             {
                 Logger.Debugf("Raw push content: {0}", serialized);
-                var message = SimpleJson.DeserializeObject<PushBoxMessage>(serialized, SimpleJson.DataContractJsonSerializerStrategy);
+                var message = ParsePushBoxMessage(serialized);
                 if (message != null)
                 {
                     TriggerPush(message);
@@ -144,6 +144,16 @@ namespace HouseOfCode.PushBoxSDK
                 Logger.Warn($"Could not deserialize pushbox message: [{se.Message}], from: \"{serialized}\"");
                 OnPushError?.Invoke(this, new OnPushErrorEventArgs(se));
             }
+        }
+
+        /// <summary>
+        ///     Parse PushboxMessage from string.
+        /// </summary>
+        /// <param name="pushboxMessageJson"></param>
+        /// <returns></returns>
+        public static PushBoxMessage ParsePushBoxMessage(string pushboxMessageJson)
+        {
+            return SimpleJson.DeserializeObject<PushBoxMessage>(pushboxMessageJson, SimpleJson.DataContractJsonSerializerStrategy);
         }
 
         private void SetupNetworkReachability()
