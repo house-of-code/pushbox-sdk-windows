@@ -6,6 +6,8 @@ namespace HouseOfCode.PushBoxSDK
     {
         private string tag = "";
 
+        const LogLevel DefaultLogLevel = LogLevel.Error;
+
         LogLevel _level;
         LogLevel ILogger.Level
         {
@@ -65,10 +67,20 @@ namespace HouseOfCode.PushBoxSDK
             }
         }
 
-        public Logger(string tag, LogLevel logLevel = LogLevel.Error)
+        public void Warn(Exception e, string message)
+        {
+            Warnf("{0}: {1}", message, e.Message);
+        }
+
+        public Logger(string tag, LogLevel logLevel = DefaultLogLevel)
         {
             this.tag = tag;
             this._level = logLevel;
+        }
+
+        public static ILogger WithType<T>(LogLevel logLevel = DefaultLogLevel)
+        {
+            return new Logger(typeof (T).FullName, logLevel);
         }
     }
 }

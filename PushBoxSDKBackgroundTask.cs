@@ -6,6 +6,7 @@ using Windows.ApplicationModel;
 using Windows.ApplicationModel.Background;
 using Windows.Networking.PushNotifications;
 using HouseOfCode.PushBoxSDK.Helpers;
+using HouseOfCode.PushBoxSDK.Api;
 
 namespace HouseOfCode.PushBoxSDK
 {
@@ -21,8 +22,15 @@ namespace HouseOfCode.PushBoxSDK
         /// </summary>
         /// <param name="taskInstance"></param>
         /// <returns>Parsed PushBox message or null</returns>
-        public PushBoxMessage HandleBackgroundTaskTriggered(IBackgroundTaskInstance taskInstance)
+        public async Task<PushBoxMessage> HandleBackgroundTaskTriggered(IBackgroundTaskInstance taskInstance)
         {
+            var settingsHelper = new LocalSettingsHelper();
+            if (settingsHelper.TryGetValueWithDefault(Constants.LocalSettingsIsInForeground, false))
+            {
+                Logger.Debug("Is in foreground mode, do not handle in background task");
+                return null;
+            }
+
             var notification = taskInstance.TriggerDetails as RawNotification;
 
             if (notification == null)
@@ -33,12 +41,19 @@ namespace HouseOfCode.PushBoxSDK
 
             try
             {
-                return PushBoxSDK.ParsePushBoxMessage(notification.Content);
+                var message = PushBoxSDK.ParsePushBoxMessage(notification.Content);
+                await PushBoxSDK.Instance.LogPushInteracted(message.Id);
+                return message;
             }
             catch (SerializationException se)
             {
                 Logger.Warn(se.Message);
             }
+            catch (Exception e)
+            {
+                Logger.Warn($"Error when logging push interaction: {e.Message}");
+            }
+
             return null;
         }
 
@@ -56,7 +71,7 @@ namespace HouseOfCode.PushBoxSDK
             }
             catch (Exception e)
             {
-                Logger.Warn(e.Message);
+                Logger.Warn(e, $"Error registering background task");
             }
         }
 

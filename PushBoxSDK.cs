@@ -69,12 +69,19 @@ namespace HouseOfCode.PushBoxSDK
             OnMessagesReceived?.Invoke(this, new OnMessagesReceivedEventArgs(messages));
         }
 
-        private void TriggerPush(PushBoxMessage message)
+        private async Task TriggerPush(PushBoxMessage message)
         {
             var eventArgs = new OnPushEventArgs(message);
             Debug.Assert(OnPush != null, "OnPush != null");
             OnPush(this, eventArgs);
-            ApiInstance.LogPushInteracted(message.Id);
+
+            try
+            {
+                await ApiInstance.LogPushInteracted(message.Id);
+            } catch (Exception e)
+            {
+                Logger.Warn(e, "Error when logging push interaction");
+            }
         }
 
         /// <summary>
@@ -85,11 +92,37 @@ namespace HouseOfCode.PushBoxSDK
         public void Initialize(string apiKey, string apiSecret)
         {
             Logger.Debug("Setting up...");
+            // Save api key and secret
             Instance.ApiInstance = new Api(apiKey, apiSecret, new Logger("Api", Logger.Level));
+            var localSettings = new LocalSettingsHelper();
+            localSettings.AddOrUpdateValue(Constants.LocalSettingsKeyApiKey, apiKey);
+            localSettings.AddOrUpdateValue(Constants.LocalSettingsKeyApiSecret, apiSecret);
             Instance.Start();
         }
 
-        
+        /// <summary>
+        /// Activate foreground mode. Notifications are ignored in background task.
+        /// </summary>
+        public void ActivateForegroundMode()
+        {
+            SetIsInForeground(true);
+        }
+
+        private void SetIsInForeground(bool value)
+        {
+            Logger.Debug($"Setting foreground mode {value}");
+            var localSettings = new LocalSettingsHelper();
+            localSettings.AddOrUpdateValue(Constants.LocalSettingsIsInForeground, value);
+        }
+
+        /// <summary>
+        /// Activate background mode. Notifications are handled in background task.
+        /// </summary>
+        public void ActivateBackgroundMode()
+        {
+            SetIsInForeground(false);
+        }
+
         /// <summary>
         /// Api has been setup, start registering channel/setting push token
         /// </summary>
@@ -120,7 +153,7 @@ namespace HouseOfCode.PushBoxSDK
             }
         }
 
-        private void ChannelOnPushNotificationReceived(PushNotificationChannel sender, PushNotificationReceivedEventArgs args)
+        private async void ChannelOnPushNotificationReceived(PushNotificationChannel sender, PushNotificationReceivedEventArgs args)
         {
             Logger.Debug("Got push!");
             if (args.NotificationType != PushNotificationType.Raw)
@@ -136,7 +169,7 @@ namespace HouseOfCode.PushBoxSDK
                 var message = ParsePushBoxMessage(serialized);
                 if (message != null)
                 {
-                    TriggerPush(message);
+                    await TriggerPush(message);
                 }
             }
             catch (SerializationException se)
@@ -154,6 +187,45 @@ namespace HouseOfCode.PushBoxSDK
         public static PushBoxMessage ParsePushBoxMessage(string pushboxMessageJson)
         {
             return SimpleJson.DeserializeObject<PushBoxMessage>(pushboxMessageJson, SimpleJson.DataContractJsonSerializerStrategy);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="pushId"></param>
+        public async Task LogPushInteracted(int pushId)
+        {
+            if (!IsSetup)
+            {
+                TrySetupFromLocalSettings();
+            }
+
+            if (IsSetup)
+            {
+                try
+                {
+                    await ApiInstance.LogPushInteracted(pushId);
+                } catch (Exception e)
+                {
+                    Logger.Warn(e, "Error logging push interaction");
+                }
+            }
+        }
+
+        private void TrySetupFromLocalSettings()
+        {
+            var localSettings = new LocalSettingsHelper();
+            var apiKey = localSettings.TryGetValueWithDefault(Constants.LocalSettingsKeyApiKey, "");
+            var apiSecret = localSettings.TryGetValueWithDefault(Constants.LocalSettingsKeyApiSecret, "");
+
+            if (apiKey == "")
+            {
+                this.Logger.Warn("Could not initialize from local settings.");
+                return;
+            } else
+            {
+                this.Initialize(apiKey, apiSecret);
+            }
         }
 
         private void SetupNetworkReachability()
@@ -310,9 +382,18 @@ namespace HouseOfCode.PushBoxSDK
             private string ApiSecret { get; set; }
             private ILogger Logger { get; set; }
 
+            private LocalSettingsHelper localSettingsHelper = new LocalSettingsHelper();
+
             private bool IsWorking { get; set; }
             private bool IsReady => !string.IsNullOrEmpty(Token);
-            private bool IsTokenSent { get; set; }
+            private bool IsTokenSent
+            {
+                get { return this.localSettingsHelper.TryGetValueWithDefault<bool>(Constants.LocalSettingsKeyIsTokenSent, false); }
+                set
+                {
+                    localSettingsHelper.AddOrUpdateValue(Constants.LocalSettingsKeyIsTokenSent, value);
+                }
+            }
 
             private string _token;
             internal string Token
@@ -350,6 +431,7 @@ namespace HouseOfCode.PushBoxSDK
             }
 
             private Queue<RequestQueueItem> _requestQueue;
+
             private Queue<RequestQueueItem> RequestQueue
             {
                 get
@@ -427,7 +509,7 @@ namespace HouseOfCode.PushBoxSDK
             }
 
             
-            internal async void LogPushInteracted(int pushId)
+            public async Task LogPushInteracted(int pushId)
             {
                 var parameters = new Dictionary<string, object>()
                 {
@@ -554,6 +636,12 @@ namespace HouseOfCode.PushBoxSDK
 
             private bool HandleResponse(string apiMethod, IRestResponse<Response> response)
             {
+                if (response == null)
+                {
+                    Logger.Debugf("Got null response.");
+                    return false;
+                }
+
                 Logger.Debugf("Handling response(method={0}): {1}", apiMethod, response.Data);
 
                 if (response.Data == null)

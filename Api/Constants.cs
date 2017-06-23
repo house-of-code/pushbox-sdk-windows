@@ -36,6 +36,7 @@ namespace HouseOfCode.PushBoxSDK.Api
         internal static readonly string JSONKeyMessages = @"messages";
         internal static readonly string JSONKeyPushId = @"push_id";
         internal static readonly string JSONKeyPushReadTime = @"read_datetime";
+
         #endregion
 
         #region api methods
@@ -55,6 +56,10 @@ namespace HouseOfCode.PushBoxSDK.Api
         internal static readonly string LocalSettingsKeyUid = "PushBoxSDK_UID";
         internal static readonly string LocalSettingsKeyQueue = "PushBoxSDK_Queue";
         internal static readonly string LocalSettingsKeyAppVersion = "PushBoxSDK_AppVersion";
+        internal static readonly string LocalSettingsKeyApiKey = "PushBoxSDK_ApiKey";
+        internal static readonly string LocalSettingsKeyApiSecret = "PushBoxSDK_ApiSecret";
+        internal static readonly string LocalSettingsIsInForeground = "PushBoxSDK_IsInForeground";
+        internal static readonly string LocalSettingsKeyIsTokenSent = "PushBoxSDK_IsTokenSent";
         #endregion
     }
 }

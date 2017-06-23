@@ -1,4 +1,6 @@
-﻿namespace HouseOfCode.PushBoxSDK
+﻿using System;
+
+namespace HouseOfCode.PushBoxSDK
 {
     public enum LogLevel
     {
@@ -17,5 +19,6 @@
 
         void Warnf(string v, params object[] p);
         void Warn(string v);
+        void Warn(Exception e, string v);
     }
 }
